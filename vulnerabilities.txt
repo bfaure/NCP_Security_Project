@@ -20,18 +20,26 @@ ________________________________________________________________________________
 			| the file is actually in the /tftpdir child directory. This means that any user can access any
 	 		| file on the entire system. To fix this I have replaced the primitive system call with a
 	 		| function called check_if_file_exists() which checks to ensure the requested file is actually
-	 		| in the /tftpdir directory.
-	 		| 
-#2 	| 		|  
-	 		| 
-	 		| 
+	 		| in the /tftpdir directory. I have assumed that, for example, a request to 'test.txt' is 
+	 		| referring to a file named tftpdir/test.txt. I am requiring that all files be exactly in the
+	 		| /tftpdir directory, such that any request containing a '/' or '\' in its filename is invalid.
 	 		| 
 	 		| 
 	 		| 
-	 		| 
-#3	| 		|  
-			| 
-			| 
+#2 	| 45/46	| Once a read request file transfer begins, the server allocates a full 10 seconds before the
+	 		| response from the client (i.e. an ACK, block #) is considered timed-out. This means that, if 
+	 		| the requested file was enormous, the server could effectively be in a DOS state if the cleint
+	 		| was strategically sending its ACK responses after ~9 seconds, until the entire transfer was  
+	 		| over. The largest number of allowable blocks, given a block-size of 512 bytes and a maximum
+	 		| TFTP filesize of 32 MB, a single transfer could block up the server for a total of 65,535 x 
+	 		| 10 seconds, or 182 hours. To somewhat reduce the risk of this being an issue, I have decreased
+			| the maximum socket timeout to 5 seconds and have set a variable at the top of the
+			| handle_read_request function to track the total transfer time. If the total time ever exceeds
+			| a maximum threshhold (I have set to 100 seconds) the transfer will be canceled pre-maturely.
+			| 						
+#3	| 36	| The PKT_BUF_SIZE pre-processor variable was set to 1024 bytes, when the maximum transfer 
+			| packets in TFTP are 512 bytes. This would theoretically allow an attacker to perform a buffer
+			| overflow exploit
 	 		| 
 	 		| 
 	 		| 
