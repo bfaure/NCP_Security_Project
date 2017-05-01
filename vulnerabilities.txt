@@ -1,0 +1,38 @@
+(1) Attached is a buggy, naive, and vulnerable implementation of a TFTP server (netascii mode, and error messages are not implemented). Assume that this server runs as root on a server in the current working directory /tftpdir. Clients should be able to download any file from this directory, but no others on the server machine.
+
+The server implementation contains many of the vulnerabilities that we discussed in class. Example vulnerabilities you should consider are those that would allow an adversary to crash the server (denial of service), gain access to unauthorized files (confidentiality), be able to modify files on the server (data integrity), or even execution of arbitrary code. Identify these vulnerabilities and fix them.
+
+-------------------------------------------
+
+vulnerabilities.txt
+
+Course Name:  14:332:456-Network Centric Programming
+Assignment:   Security
+Student Name: Brian Faure
+
+*line numbers refer to those in tftpserver-vulnerable.c
+
+	  Line #  Patch description 
+______________________________________________________________________________________________________
+
+#1	| 119	| To check whether or not the requested file exists, the initial implementation uses the "-e"
+	 		| system command which will return true if the file exists, but will not check to ensure that
+			| the file is actually in the /tftpdir child directory. This means that any user can access any
+	 		| file on the entire system. To fix this I have replaced the primitive system call with a
+	 		| function called check_if_file_exists() which checks to ensure the requested file is actually
+	 		| in the /tftpdir directory.
+	 		| 
+#2 	| 		|  
+	 		| 
+	 		| 
+	 		| 
+	 		| 
+	 		| 
+	 		| 
+#3	| 		|  
+			| 
+			| 
+	 		| 
+	 		| 
+	 		| 
+	 		| 

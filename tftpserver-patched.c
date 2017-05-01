@@ -1,11 +1,27 @@
+/*
+ * tftpserver-patched.c
+
+ * Course Name:  14:332:456-Network Centric Programming
+ * Assignment:   Security
+ * Student Name: Brian Faure
+
+See the 'vulnerabilities.txt' file for full list of patched vulnerabilities. 
+Any other changes to the file are either trivial or have been explained with
+a comment.
+
+*/
+
 #include <sys/socket.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <sys/types.h> // for O_RDONLY
+#include <fcntl.h> // for O_RDONLY
 
-#define TFTP_SRV_PORT 69
+// had to change this for it to work on my personal machine
+#define TFTP_SRV_PORT 15213 
 
 #define OPC_WRQ 2
 #define OPC_RRQ 1
@@ -38,7 +54,6 @@
 
 #define PKT_BLOCK(p) ((short*)(p+2))
 #define PKT_DATA(p) p+4
-
 
 
 void exitWithError() {
@@ -88,6 +103,33 @@ int read_next_block(FILE* file, char* buf, int mode) {
   return bytesRead;
 }
 
+// checks to see if the requested file exists, and is in the /tftpdir directory
+int check_if_file_exists(char *filename)
+{
+  // check if the requested filename contains any '/' characters 
+  if (strchr(filename,'/')!=NULL)
+  {
+    // any requested file must be in the /tftpdir directory (tftpdir/example.txt) 
+    return 0;
+  }
+
+  // add the tftpdir/ to the filename
+  char true_filename[128];
+  sprintf(true_filename,"tftpdir/%s",filename);
+
+  // attempt to open the requested file
+  int fd = open(filename,O_RDONLY); 
+  if (fd<0)
+  {
+    // not able to locate the file
+    return 0;
+  }
+  close(fd);
+
+  // the file exists, and is directly in the tftpdir/ directory
+  return 1;
+}
+
 int main() {
 
   int srv_fd = createServerSocket(TFTP_SRV_PORT);
@@ -105,6 +147,8 @@ int main() {
     if((packet_len = recvfrom(srv_fd, packet, sizeof(packet), 0, (struct sockaddr*) &client_addr, &client_addr_len)) < 0)
       exitWithError();
 
+    printf("Got a request\n");
+
     // check for valid request
   
     if(ntohs(PKT_OPCODE(packet)) != OPC_RRQ) {
@@ -115,36 +159,48 @@ int main() {
     // test if file exists
 
     sprintf(command, "[ -e %s ]", PKT_FILENAME(packet));
-    int status;
-    if((status = system(command)) < 0)
-      exitWithError;
-    if(WEXITSTATUS(status) != 0) // file does not exist
+    printf("command: %s\n",command);
+
+    if (check_if_file_exists(PKT_FILENAME(packet))==0)
+    {
+      printf("File does not exist\n");
       continue;
+    }
+    printf("File exists\n");
 
     // check mode
-    
     int mode = 0;
-	char modeString[MAX_MODE_LENGTH];
-	strcpy(modeString, PKT_MODE(packet));
+  	char modeString[MAX_MODE_LENGTH];
+  	strcpy(modeString, PKT_MODE(packet));
+    
     if(strcasecmp(modeString, "octet") == 0)
-      mode = MODE_OCTET;
-    else if(strcasecmp(modeString, "netascii") == 0) {
-      mode = MODE_NETASCII;
-	  continue; // incomplete -- netascii not supported
-	}
+    {
+        printf("octet mode detected\n");
+        mode = MODE_OCTET;
+    }
+    else if(strcasecmp(modeString, "netascii") == 0) 
+    {
+        printf("netascii mode detected, not supported\n");
+        mode = MODE_NETASCII;
+        continue; // incomplete -- netascii not supported
+  	}
     else
+    {
+      printf("Unsupported transfer mode (%d)\n",modeString);
       continue; 
+    }
 
     FILE* file;
-    if ((file = fopen(PKT_FILENAME(packet), "r")) == NULL) {
-      fprintf(stderr, "Error opening file %s: %s", PKT_FILENAME(packet), strerror(errno));
-      continue;
+    if ((file = fopen(PKT_FILENAME(packet), "r")) == NULL) 
+    {
+        fprintf(stderr, "Error opening file %s: %s", PKT_FILENAME(packet), strerror(errno));
+        continue;
     }
 
     // create Connection-specific Socket on random port
     int conn_fd;
     conn_fd = create_connected_socket(&client_addr,client_addr_len);
- 
+   
     handle_read_request(conn_fd, file, mode);
   }
 }
