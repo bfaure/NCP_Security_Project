@@ -19,6 +19,7 @@ a comment.
 #include <sys/wait.h>
 #include <sys/types.h> // for O_RDONLY
 #include <fcntl.h> // for O_RDONLY
+#include <time.h> // for time(NULL)
 
 // had to change this for it to work on my personal machine
 #define TFTP_SRV_PORT 15213 
@@ -32,7 +33,7 @@ a comment.
 #define MODE_OCTET 0
 #define MODE_NETASCII 1
 
-#define PKT_BUF_SIZE 1024
+#define PKT_BUF_SIZE 512 // used to be 1024, allowed for buffer-overflow exploits
 
 #define BLOCK_SIZE 512
 #define DATA_HDR_LEN 4
@@ -42,8 +43,9 @@ a comment.
 
 #define STARTING_BLOCK_NUM 1
 
+#define MAX_TRANSFER_TIME 100 // maximum time to allocate to a transfer
 #define MAX_RETRIES 5
-#define TIMEOUT 10
+#define TIMEOUT 5
 #define MAX_FILENAME_SIZE 128
 
 // Macros for accessing fields in the request packet
@@ -113,9 +115,14 @@ int check_if_file_exists(char *filename)
     return 0;
   }
 
+  // length of the name requested
+  int orig_len = strlen(filename);
+
+  // create buffer to hold 'tftpdir/'+filename
+  char *true_filename = malloc(orig_len+9);
+
   // add the tftpdir/ to the filename
-  char true_filename[128];
-  sprintf(true_filename,"tftpdir/%s",filename);
+  snprintf(true_filename,orig_len+9,"tftpdir/%s",filename);
 
   // attempt to open the requested file
   int fd = open(filename,O_RDONLY); 
@@ -210,10 +217,12 @@ int handle_read_request(int conn_fd, FILE* file, int mode) {
   char recv_buf[PKT_BUF_SIZE];
   int block_num=STARTING_BLOCK_NUM;
 
+  unsigned long start_time; // to track total transfer time, break if past MAX_TRANSFER_TIME
 
   PKT_OPCODE(send_buf) = htons(OPC_DATA);
   int data_len;
-  do {
+  do 
+  {
     int retry_cnt = 0;
     // read 512 byte block from file (optional netascii conversion)    
     *(PKT_BLOCK(send_buf)) = htons(block_num);
@@ -221,7 +230,14 @@ int handle_read_request(int conn_fd, FILE* file, int mode) {
 
   retry:    
     if(write(conn_fd, send_buf, DATA_HDR_LEN + data_len) < 0)
+    {
       exitWithError();
+    }
+
+    if ( (unsigned long)time(NULL)-start_time>MAX_TRANSFER_TIME )
+    {
+      goto closeConn;
+    }
 
     struct sockaddr_in cli_addr;
     socklen_t cli_addr_len = sizeof(cli_addr);
@@ -239,37 +255,47 @@ int handle_read_request(int conn_fd, FILE* file, int mode) {
 
     int num_socks;
     if((num_socks = select(maxfd+1, &fds, (fd_set*) 0, (fd_set*) 0, &timeout)) < 0)
+    {
       exitWithError();
-    if(!num_socks) {// timeout expired
-      if(++retry_cnt < MAX_RETRIES)
-	goto retry;
-      else {
-	    // incomplete - may need to send ERROR packet here
-        goto closeConn;
+    }
+    if(!num_socks) 
+    {   // timeout expired
+        if(++retry_cnt < MAX_RETRIES)
+        {
+	         goto retry;
+        }
+        else 
+        {
+	        // incomplete - may need to send ERROR packet here
+          goto closeConn;
       }
     }
 
     // if the socket is readable according to select , recvfrom should never block
      
-    if(recvfrom(conn_fd, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*) &cli_addr, &cli_addr_len) < 0) {
+    if(recvfrom(conn_fd, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*) &cli_addr, &cli_addr_len) < 0) 
+    {
       if(errno==ECONNREFUSED)
-	goto closeConn;
+        goto closeConn;
       else
-	exitWithError();	
+        exitWithError();	
     }   
 
     // Check the received packet (check that it is from correct sender not
     // needed since we use a connected socket)
 
-	// incomplete -- should also check for error packet from client
-    if(PKT_OPCODE(recv_buf) != htons(OPC_ACK)) {
+	  // incomplete -- should also check for error packet from client
+    if(PKT_OPCODE(recv_buf) != htons(OPC_ACK)) 
+    {
       if(++retry_cnt < MAX_RETRIES)
-		goto retry; 
+        goto retry; 
       goto closeConn;
     }
-    if((*PKT_BLOCK(recv_buf)) < htons(block_num)) {
+
+    if((*PKT_BLOCK(recv_buf)) < htons(block_num)) 
+    {
       if(++retry_cnt < MAX_RETRIES)
-		goto retry; 
+        goto retry; 
       goto closeConn;
     }
     block_num++;              
