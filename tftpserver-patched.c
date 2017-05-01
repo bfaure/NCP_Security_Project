@@ -147,7 +147,6 @@ int main() {
   struct sockaddr_in client_addr;
   char packet[PKT_BUF_SIZE];
   socklen_t client_addr_len = sizeof(client_addr);
-  char command[MAX_FILENAME_SIZE + 8];
   
   while(1) { // endless loop to handle multiple connections
 
@@ -163,11 +162,7 @@ int main() {
       continue; // wait for a new request packet ...
     }
 
-    // test if file exists
-
-    sprintf(command, "[ -e %s ]", PKT_FILENAME(packet));
-    printf("command: %s\n",command);
-
+    // check if file exists, and is in the /tftpdir directory
     if (check_if_file_exists(PKT_FILENAME(packet))==0)
     {
       printf("File does not exist\n");
@@ -177,8 +172,11 @@ int main() {
 
     // check mode
     int mode = 0;
-  	char modeString[MAX_MODE_LENGTH];
-  	strcpy(modeString, PKT_MODE(packet));
+
+    // prevent buffer overflow attacks by allocating memory on the heap
+    // and using snprintf to set a maximum write size into the buffer
+    char *modeString = malloc(sizeof(char)*MAX_MODE_LENGTH);
+    snprintf(modeString,MAX_MODE_LENGTH,"%s",PKT_MODE(packet));
     
     if(strcasecmp(modeString, "octet") == 0)
     {

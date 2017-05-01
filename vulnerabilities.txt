@@ -1,9 +1,3 @@
-(1) Attached is a buggy, naive, and vulnerable implementation of a TFTP server (netascii mode, and error messages are not implemented). Assume that this server runs as root on a server in the current working directory /tftpdir. Clients should be able to download any file from this directory, but no others on the server machine.
-
-The server implementation contains many of the vulnerabilities that we discussed in class. Example vulnerabilities you should consider are those that would allow an adversary to crash the server (denial of service), gain access to unauthorized files (confidentiality), be able to modify files on the server (data integrity), or even execution of arbitrary code. Identify these vulnerabilities and fix them.
-
--------------------------------------------
-
 vulnerabilities.txt
 
 Course Name:  14:332:456-Network Centric Programming
@@ -24,8 +18,6 @@ ________________________________________________________________________________
 	 		| referring to a file named tftpdir/test.txt. I am requiring that all files be exactly in the
 	 		| /tftpdir directory, such that any request containing a '/' or '\' in its filename is invalid.
 	 		| 
-	 		| 
-	 		| 
 #2 	| 45/46	| Once a read request file transfer begins, the server allocates a full 10 seconds before the
 	 		| response from the client (i.e. an ACK, block #) is considered timed-out. This means that, if 
 	 		| the requested file was enormous, the server could effectively be in a DOS state if the cleint
@@ -39,7 +31,17 @@ ________________________________________________________________________________
 			| 						
 #3	| 36	| The PKT_BUF_SIZE pre-processor variable was set to 1024 bytes, when the maximum transfer 
 			| packets in TFTP are 512 bytes. This would theoretically allow an attacker to perform a buffer
-			| overflow exploit
+			| overflow exploit it they were able to append malicious code onto the end of the packet then
+	 		| redirect the stack pointer. I have changed this to 512 bytes to help prevent this from 
+	 		| happening.
+	 		| 
+#4	| 128	| The requested mode for an incoming packet is being written into a char buffer using the strcpy
+			| method, which is not able to prevent itself from overwriting the maximum length of the buffer.
+			| This could be exploited by a malicious user to gain access to the system shell using a buffer
+	 		| overflow attack. I have replaced the static buffer allocation and strcpy method with a
+	 		| malloc-allocated modeString char buffer and am now using snprintf to write the packet mode 
+	 		| into said buffer. snprintf should be able to detect buffer overflows by only allowing to write
+	 		| a maximum of 8 characters, specified in the MAX_MODE_LENGTH input parameter.
 	 		| 
 	 		| 
 	 		| 
